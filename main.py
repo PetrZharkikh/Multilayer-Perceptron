@@ -132,7 +132,7 @@ for epoch in range(epochs):
             mlp.backward()
             batch_loss += loss
 
-        #mlp.clip_grad(1.0)
+        mlp.clip_grad(1.0)
         mlp.update(lr, len(batch_X), l2_lambda)
 
         epoch_loss += batch_loss
