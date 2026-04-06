@@ -12,13 +12,21 @@ class Linear:
         return self.W @ x + self.b
     
     def backward(self, grad_output):
-        self.dW = np.outer(grad_output, self.x)
-        self.db = grad_output
+        self.dW += np.outer(grad_output, self.x)
+        self.db += grad_output
         return self.W.T @ grad_output
     
-    def update(self, lr):
-        self.W -= lr * self.dW
-        self.b -= lr * self.db
+    def update(self, lr, batch_size):
+        self.W -= lr * (self.dW / batch_size)
+        self.b -= lr * (self.db / batch_size)
+
+    def zero_grad(self):
+        self.dW = np.zeros_like(self.W)
+        self.db = np.zeros_like(self.b)
+
+    def clip_grad(self, clip_value):
+        self.dW = np.clip(self.dW, -clip_value, clip_value)
+        self.db = np.clip(self.db, -clip_value, clip_value)
 
 class ReLU:
     def forward(self, x):
@@ -39,9 +47,11 @@ class MSELoss:
 class MLP:
     def __init__(self):
         self.layers = [
-            Linear(4, 8),
+            Linear(4, 16),
             ReLU(),
-            Linear(8, 4)
+            Linear(16, 16),
+            ReLU(),
+            Linear(16, 4)
         ]
 
         self.loss_fn = MSELoss()
@@ -60,10 +70,21 @@ class MLP:
         for layer in reversed(self.layers):
             grad = layer.backward(grad)
 
-    def update(self, lr):
+    def update(self, lr, batch_size):
         for layer in self.layers:
             if hasattr(layer, "update"):
-                layer.update(lr)
+                layer.update(lr, batch_size)
+
+    def zero_grad(self):
+        for layer in self.layers:
+            if hasattr(layer, "zero_grad"):
+                layer.zero_grad()
+    
+    def clip_grad(self, clip_value):
+        for layer in self.layers:
+            if hasattr(layer, "clip_grad"):
+                layer.clip_grad(clip_value)
+
 
 def target_function(x):
     x1, x2, x3, x4 = x
@@ -79,19 +100,41 @@ def generate_data(n):
     Y = np.array([target_function(x) for x in X])
     return X, Y
 
+def create_batches(X, Y, batch_size):
+    indices = np.arange(len(X))
+    np.random.shuffle(indices)
+
+    X = X[indices]
+    Y = Y[indices]
+
+    for start in range(0, len(X), batch_size):
+        end = start + batch_size
+        yield X[start:end], Y[start:end]
+
+X, Y = generate_data(1000)
+
 mlp = MLP()
+lr = 0.01
+epochs = 100
+batch_size = 32
 
-x = np.array([1.0, 2.0, 3.0, 4.0])
-y_true = target_function(x)
+for epoch in range(epochs):
+    epoch_loss = 0
 
-y_pred = mlp.forward(x)
-loss = mlp.loss(y_pred, y_true)
+    for batch_X, batch_Y in create_batches(X, Y, batch_size):
+        mlp.zero_grad()
+        batch_loss = 0
 
-print("y_pred =", y_pred)
-print("y_true =", y_true)
-print("loss =", loss)
+        for x, y in zip(batch_X, batch_Y):
+            y_pred = mlp.forward(x)
+            loss = mlp.loss(y_pred, y)
+            mlp.backward()
+            batch_loss += loss
 
-mlp.backward()
-mlp.update(0.01)
+        #mlp.clip_grad(1.0)
+        mlp.update(lr, len(batch_X))
 
-print("done")
+        epoch_loss += batch_loss
+
+    avg_loss = epoch_loss / len(X)
+    print(f"epoch {epoch + 1}: loss = {avg_loss}")
