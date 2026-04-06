@@ -16,8 +16,8 @@ class Linear:
         self.db += grad_output
         return self.W.T @ grad_output
     
-    def update(self, lr, batch_size):
-        self.W -= lr * (self.dW / batch_size)
+    def update(self, lr, batch_size, l2_lambda):
+        self.W -= lr * ((self.dW / batch_size) + l2_lambda * self.W)
         self.b -= lr * (self.db / batch_size)
 
     def zero_grad(self):
@@ -70,10 +70,10 @@ class MLP:
         for layer in reversed(self.layers):
             grad = layer.backward(grad)
 
-    def update(self, lr, batch_size):
+    def update(self, lr, batch_size, l2_lambda):
         for layer in self.layers:
             if hasattr(layer, "update"):
-                layer.update(lr, batch_size)
+                layer.update(lr, batch_size, l2_lambda)
 
     def zero_grad(self):
         for layer in self.layers:
@@ -117,6 +117,7 @@ mlp = MLP()
 lr = 0.01
 epochs = 100
 batch_size = 32
+l2_lambda = 1e-4
 
 for epoch in range(epochs):
     epoch_loss = 0
@@ -132,9 +133,18 @@ for epoch in range(epochs):
             batch_loss += loss
 
         #mlp.clip_grad(1.0)
-        mlp.update(lr, len(batch_X))
+        mlp.update(lr, len(batch_X), l2_lambda)
 
         epoch_loss += batch_loss
 
     avg_loss = epoch_loss / len(X)
     print(f"epoch {epoch + 1}: loss = {avg_loss}")
+
+for i in range(5):
+    x = X[i]
+    y_true = Y[i]
+    y_pred = mlp.forward(x)
+    print("x =", x)
+    print("y_true =", y_true)
+    print("y_pred =", y_pred)
+    print()
