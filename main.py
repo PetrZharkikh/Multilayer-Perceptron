@@ -1,4 +1,16 @@
+# Реализация многослойного перцептрона (MLP) с нуля на NumPy.
+# Включает:
+# - Linear слои
+# - ReLU активацию
+# - MSE Loss
+# - Обратное распространение ошибки (backpropagation)
+# - Обучение с помощью градиентного спуска
+# - Батчи, аккумуляцию градиентов, L2-регуляризацию и gradient clipping
+
 import numpy as np
+
+# Линейный слой: y = W x + b
+# Хранит параметры W и b, а также их градиенты
 
 class Linear:
     def __init__(self, in_features, out_features):
@@ -8,32 +20,44 @@ class Linear:
         self.db = np.zeros_like(self.b)
 
     def forward(self, x):
+        # Сохраняем вход x для использования в backward
         self.x = x
         return self.W @ x + self.b
     
     def backward(self, grad_output):
+        # Вычисляем градиенты по параметрам слоя:
+        # dW = grad_output ⊗ x (outer product)
+        # db = grad_output
+        # Возвращаем градиент по входу для предыдущего слоя
         self.dW += np.outer(grad_output, self.x)
         self.db += grad_output
         return self.W.T @ grad_output
     
     def update(self, lr, batch_size, l2_lambda):
+        # Обновление параметров по правилу градиентного спуска
+        # Добавлена L2-регуляризация для весов
         self.W -= lr * ((self.dW / batch_size) + l2_lambda * self.W)
         self.b -= lr * (self.db / batch_size)
 
     def zero_grad(self):
+        # Обнуляем накопленные градиенты перед новым батчем
         self.dW = np.zeros_like(self.W)
         self.db = np.zeros_like(self.b)
 
     def clip_grad(self, clip_value):
+        # Ограничиваем значения градиентов (gradient clipping)
+        # Это помогает избежать взрывных градиентов
         self.dW = np.clip(self.dW, -clip_value, clip_value)
         self.db = np.clip(self.db, -clip_value, clip_value)
 
 class ReLU:
     def forward(self, x):
+        # Запоминаем маску положительных элементов
         self.mask = x > 0
         return np.maximum(0, x)
     
     def backward(self, grad_output):
+        # Градиент проходит только через положительные элементы
         return grad_output * self.mask
 
 class MSELoss:
@@ -76,11 +100,13 @@ class MLP:
                 layer.update(lr, batch_size, l2_lambda)
 
     def zero_grad(self):
+        # Обнуляем градиенты во всех слоях перед новым батчем
         for layer in self.layers:
             if hasattr(layer, "zero_grad"):
                 layer.zero_grad()
     
     def clip_grad(self, clip_value):
+        # Применяем clipping ко всем слоям
         for layer in self.layers:
             if hasattr(layer, "clip_grad"):
                 layer.clip_grad(clip_value)
@@ -133,6 +159,8 @@ for epoch in range(epochs):
             batch_loss += loss
 
         mlp.clip_grad(1.0)
+        # Ограничиваем градиенты
+        # Обновляем веса по градиентному спуску
         mlp.update(lr, len(batch_X), l2_lambda)
 
         epoch_loss += batch_loss
@@ -140,6 +168,7 @@ for epoch in range(epochs):
     avg_loss = epoch_loss / len(X)
     print(f"epoch {epoch + 1}: loss = {avg_loss}")
 
+# Проверка качества модели на нескольких примерах
 for i in range(5):
     x = X[i]
     y_true = Y[i]
